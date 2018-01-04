@@ -1,0 +1,83 @@
+Docker使用linux iptables来控制与它创建的接口和网络之间的通信
+
+fiter表是网络或接口的流量的安全规则表
+
+过滤器表具有3个链：用于处理到达主机并且去往同一主机的分组的输入链，用于发送到外部目的地的主机的分组的输出链，以及用于进入主机但具有目的地外部主机
+
+```
+Chain DOCKER (2 references)
+ pkts bytes target     prot opt in     out     source               destination         
+    0     0 ACCEPT     tcp  --  !docker_gwbridge docker_gwbridge  anywhere             172.18.0.5           tcp dpt:4534
+    0     0 ACCEPT     tcp  --  !docker_gwbridge docker_gwbridge  anywhere             172.18.0.5           tcp dpt:4533
+    0     0 ACCEPT     tcp  --  !docker_gwbridge docker_gwbridge  anywhere             172.18.0.5           tcp dpt:4532
+    0     0 ACCEPT     tcp  --  !docker_gwbridge docker_gwbridge  anywhere             172.18.0.6           tcp dpt:4531
+
+Chain DOCKER-INGRESS (1 references)
+ pkts bytes target     prot opt in     out     source               destination         
+   10  1044 ACCEPT     tcp  --  any    any     anywhere             anywhere             tcp dpt:4511
+    6  2030 ACCEPT     tcp  --  any    any     anywhere             anywhere             state RELATED,ESTABLISHED tcp spt:4511
+ 1215  228K ACCEPT     tcp  --  any    any     anywhere             anywhere             tcp dpt:4510
+  799 9728K ACCEPT     tcp  --  any    any     anywhere             anywhere             state RELATED,ESTABLISHED tcp spt:4510
+  282 23069 RETURN     all  --  any    any     anywhere             anywhere            
+
+Chain DOCKER-ISOLATION (1 references)
+ pkts bytes target     prot opt in     out     source               destination         
+    0     0 DROP       all  --  docker_gwbridge docker0  anywhere             anywhere            
+    0     0 DROP       all  --  docker0 docker_gwbridge  anywhere             anywhere            
+  282 23069 RETURN     all  --  any    any     anywhere             anywhere            
+```
+
+`DOCKER-ISOLATION`包含限制不同容器网络之间的访问的规则
+
+Docker使用nat允许桥接网络上的容器与docker主机之外的目的地进行通信（否则指向容器网络的路由必须在docker主机的网络中添加）
+
+```
+Chain DOCKER (2 references)
+target     prot opt source               destination         
+RETURN     all  --  anywhere             anywhere            
+RETURN     all  --  anywhere             anywhere            
+DNAT       tcp  --  anywhere             anywhere             tcp dpt:4534 to:172.18.0.5:4534
+DNAT       tcp  --  anywhere             anywhere             tcp dpt:4533 to:172.18.0.5:4533
+DNAT       tcp  --  anywhere             anywhere             tcp dpt:4532 to:172.18.0.5:4532
+DNAT       tcp  --  anywhere             anywhere             tcp dpt:4531 to:172.18.0.6:4531
+
+Chain DOCKER-INGRESS (2 references)
+target     prot opt source               destination         
+DNAT       tcp  --  anywhere             anywhere             tcp dpt:4511 to:172.18.0.2:4511
+DNAT       tcp  --  anywhere             anywhere             tcp dpt:4510 to:172.18.0.2:4510
+RETURN     all  --  anywhere             anywhere            
+
+```
+
+在createNetwork()[bridge.go]中,遍历循环一个结构体{Condition bool ; Fn setupStep}, 里面保存了创建网络的步骤, 其中一步为 network.setupIPTables()
+
+在setupIPTables()里面,判断config.Internal,如果为真,则调用setupInternalNetworkRules()(?看含义为真是内部网络,还设置网络规则?); 如果为假就调用一系列设置: 先调用setupIPTablesInternal(),再getDriverChains()获取了需要设置的规则,最后用ProgramChain()函数设置了Filter表和Nat表的链;
+
+
+removeIPChains() 删除规则链:
+调用了 chain.Remove() 函数删除了Nat表的DOCKER链，Filter表的DOCKER、DOCKER-ISOLATION两个链。
+
+```
+-> containerStart() [start.go]
+-> daemon.initializeNetworking()
+   1. getNetworkedContainer()
+   2. allocateNetwork()
+      (1). controller.SandboxDestroy()  #清理旧的沙盒
+      (2). 判断容器网络设置如果为空,更新一把
+      (3). connectToNetwork()
+           a). updateNetworkConfig()
+           b). getNetworkSandbox()
+           c). updateEndpointNetworkSettings()
+           d). BuildJoinOptions()
+           e). ep.Join()
+               -> 判断网络和endpoint是否存在,存在则退出
+               -> 各种获取,赋值,更新
+               -> populateNetworkResources() #ep填到sb中
+               -> addToCluster()
+               -> ProgramExternalConnectivity()
+                  -> allocatePorts()
+                  -> allocatePort()
+                     -> MapRange() [mapper.go]  #容器地址端口映射到主机
+                        -> pm.forward  #设置Iptables
+                        -> Forward() [iptables.go]
+```
