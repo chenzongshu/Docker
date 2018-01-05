@@ -1,0 +1,705 @@
+
+因为在看docker源代码，必须需要了解Go语言，所以做了一些学习和记录，主要记录两者不同的地方。根据实际代码阅读中的问题而来，省略了和C语言相同的部分,干货满满。
+> Go语言定义类型和变量名，方向和一般语言是反的，这点我觉得简直是反人类，非要搞个不一样的显示自己多牛牪犇
+
+# 关键字
+
+- **GOROOT**
+GO语言安装路径
+
+- **GOPATH**
+代码包所在路径,安装在系统上的GO包,路径为工作区位置,有源文件,相关包对象,执行文件
+
+# GO程序结构
+|-- bin  编译后的可执行文件 
+|-- pkg  编译后的包文件 (.a)
+|-- src  源代码
+一般来说,bin和pkg不用创建,go命令自动创建
+
+# 编译运行
+两种方式
+1、直接执行
+```
+$go run hello.go  # 实际是编译成A.OUT再执行
+
+## 如果这样运行,目录中必须有main.go,不然会报错
+```
+2、编译执行
+```
+$go build hello.go
+$./hello
+```
+
+# 关于分号
+其实，和C一样，Go的正式的语法使用分号来终止语句。和C不同的是，这些分号由词法分析器在扫描源代码过程中使用简单的规则自动插入分号，因此输入源代码多数时候就不需要分号了。
+
+
+# 包
+
+先来看一个最简单的例子,程序员都知道的hello world
+```
+package main
+
+import "fmt"
+
+func main() {
+   fmt.Println("Hello, World!")
+}
+```
+ package main 就定义了包名。你必须在源文件中非注释的第一行指明这个文件属于哪个包，如：package main。package main表示一个可独立执行的程序，每个 Go 应用程序都包含一个名为 main 的包
+
+- 多个文件组成,编译后与一个文件类似,相互可以直接引用,因此不能有相同的全局函数和变量.不得导入源代码文件中没有用到的package，否则golang编译器会报编译错误
+
+- 每个子目录只能存在一个package,同一个package可以由多个文件组成
+
+- package中每个init()函数都会被调用,如果不同文件,按照文件名字字符串比较"从小到大"的顺序,同一个文件从上到下
+
+-  要生成golang可执行程序，**必须建立一个名为main的package**，并且在该package中**必须包含一个名为main()的函数**。
+
+- **import关键字导入的是package路径，而在源文件中使用package时，才需要package名**。经常可见的import的目录名和源文件中使用的package名一致容易造成import关键字后即是package名的错觉，真正使用时，这两者可以不同
+
+# import特殊语法
+
+加载自己写的模块:
+```
+import "./model"    # 当前文件同一个目录下的model目录
+import "url/model"  # 加载GOPATH/src/url/model
+```
+
+
+## 点（.）操作
+点（.）操作的含义是：点（.）标识的包导入后，调用该包中函数时可以省略前缀包名。
+
+```
+package main
+
+import (
+    . "fmt"
+    "os"
+)
+
+func main() {
+    for _, value := range os.Args {
+        Println(value)
+    }
+}
+```
+
+## 别名操作
+别名操作的含义是：将导入的包命名为另一个容易记忆的别名
+```
+package main
+
+import (
+    f "fmt"
+    "os"
+)
+
+func main() {
+    for _, value := range os.Args {
+        f.Println(value)
+    }
+}
+```
+
+## 下划线（_）操作
+下划线（_）操作的含义是：导入该包，但不导入整个包，而是执行该包中的init函数，因此无法通过包名来调用包中的其他函数。使用下划线（_）操作往往是为了注册包里的引擎，让外部可以方便地使用。
+```
+import _ "package1"
+import _ "package2"
+import _ "package3"
+...
+```
+
+# 变量
+
+## 变量定义
+和C语言是反的
+```
+var variable_list data_type
+```
+也可以采用混合型
+```
+var a,b,c = 3,4,"foo"
+```
+
+## **:=**
+:= 表示声明变量并赋值
+```
+d:=100        #系统自动推断类型,不需要var关键字
+```
+
+## 特殊变量
+"\_" 是特殊变量,任何赋值给"_"的值都会被丢弃
+
+## 指针
+
+var var_name *var_type
+
+nil为空指针
+
+
+# 数组
+var variable_name [size] variable_type
+```
+var balance [10] float32
+var balance = [5]float32{1000.0, 2.0, 3.4, 7.0, 50.0}
+var balance = []float32{1000.0, 2.0, 3.4, 7.0, 50.0}
+```
+
+# 切片(slice)
+
+slice是动态数组,相比下切片的长度是不固定的，可以追加元素，在追加时可能使切片的容量增大
+
+```
+var identifier []type  //切片不需要说明长度。
+
+// 或者用make来创建
+var slice1 []type = make([]type, len)
+slice1 := make([]type, len)
+```
+
+切片，和python的风格类似
+```
+a := [5]int{1, 2, 3, 4, 5}
+ 
+b := a[2:4] // a[2] 和 a[3]，但不包括a[4]
+fmt.Println(b)
+ 
+b = a[:4] // 从 a[0]到a[4]，但不包括a[4]
+fmt.Println(b)
+ 
+b = a[2:] // 从 a[2]到a[4]，且包括a[2]
+fmt.Println(b)
+```
+
+# 循环与判断
+
+- if语句没有圆括号,但是必须有花括号;
+- switch没有break;
+- for没有圆括号;(注意go中没有while)
+```
+//经典的for语句 init; condition; post
+for i := 0; i<10; i++{
+     fmt.Println(i)
+}
+ 
+//精简的for语句 condition
+i := 1
+for i<10 {
+    fmt.Println(i)
+    i++
+}
+```
+
+# 函数
+```
+func (p myType ) funcName ( [parameter list] ) ( [return_types] ) {
+    函数体
+    return 语句
+}
+```
+- 函数可以有多个返回值
+- (p myType) 表明 函数所属于的类型对象！，**即为特定类型定义方法**，可以省去不写，即为普通的函数
+
+函数还可以输入不定参数,详细用法见例子:
+```
+func sum(nums ...int) {
+    fmt.Print(nums, " ")  //输出如 [1, 2, 3] 之类的数组
+    total := 0
+    for _, num := range nums { //要的是值而不是下标
+        total += num
+    }
+    fmt.Println(total)
+}
+func main() {
+    sum(1, 2)
+    sum(1, 2, 3)
+ 
+    //传数组
+    nums := []int{1, 2, 3, 4}
+    sum(nums...)
+}
+```
+
+# 方法
+一个方法就是一个包含了接受者的函数，接受者可以是命名类型或者结构体类型的一个值或者是一个指针。所有给定类型的方法属于该类型的方法集。
+语法:
+```
+func (variable_name variable_data_type) function_name() [return_type]{
+   /* function body*/
+}
+```
+下面定义一个结构体类型和该类型的一个方法：
+```
+type User struct {
+  Name  string
+  Email string
+}
+func (u User) Notify() error
+```
+首先我们定义了一个叫做 User 的结构体类型，然后定义了一个该类型的方法叫做 Notify，该方法的接受者是一个 User 类型的值。要调用 Notify 方法我们需要一个 User 类型的值或者指针：
+```
+// User 类型的值可以调用接受者是值的方法
+damon := User{"AriesDevil", "ariesdevil@xxoo.com"}
+damon.Notify()
+
+// User 类型的指针同样可以调用接受者是值的方法
+alimon := &User{"A-limon", "alimon@ooxx.com"}
+alimon.Notify()
+```
+注意，当接受者不是一个指针时，该方法操作对应接受者的值的副本(意思就是即使你使用了指针调用函数，但是函数的接受者是值类型，所以函数内部操作还是对副本的操作，而不是指针操作),当接受者是指针时，即使用值类型调用那么函数内部也是对指针的操作
+
+# 接口
+Go和传统的面向对象的编程语言不太一样,没有类和继承的概念.通过接口来实现面向对象.
+语法:
+```
+type Namer interface {
+    Method1(param_list) return_type
+    Method2(param_list) return_type
+   ...
+}
+```
+> 实现某个接口的类型，除了实现接口的方法外，还可以有自己的方法。
+```
+package main
+
+import "fmt"
+
+type Shaper interface {
+    Area() float64
+    //  Perimeter() float64
+}
+
+type Rectangle struct {
+    length float64
+    width  float64
+}
+
+// 实现 Shaper 接口中的方法
+func (r *Rectangle) Area() float64 {
+    return r.length * r.width
+}
+
+// Set 是属于 Rectangle 自己的方法
+func (r *Rectangle) Set(l float64, w float64) {
+    r.length = l
+    r.width = w
+}
+
+func main() {
+    rect := new(Rectangle)
+    rect.Set(2, 3)
+    areaIntf := Shaper(rect)
+    fmt.Printf("The rect has area: %f\n", areaIntf.Area())
+}
+```
+如果去掉 Shaper 中 Perimeter() float64的注释，编译的时候报错误，这是因为 Rectangle 没有实现 Perimeter() 方法。
+
+> - 多个类型可以实现同一个接口。 
+- 一个类型可以实现多个接口。
+
+# 内存分配
+
+有new和make
+
+- new:new(T)为一个类型为T的新项目分配了值为零的存储空间并返回其地址，也就是一个类型为*T的值,返回了一个指向新分配的类型为T的零值的指针,内存只是清零但是没有初始化.
+- make:仅用于创建切片、map和chan（消息管道），并返回类型T（不是*T）的一个**被初始化**了的（不是零）**实例**。
+
+# 错误处理 – Defer
+
+为了进行错误处理,比如防止资源泄露,go设计了一个defer函数
+```
+func CopyFile(dstName, srcName string) (written int64, err error) {
+    src, err := os.Open(srcName)
+    if err != nil {
+        return
+    }
+    defer src.Close()
+ 
+    dst, err := os.Create(dstName)
+    if err != nil {
+        return
+    }
+    defer dst.Close()
+ 
+    return io.Copy(dst, src)
+}
+```
+Go的defer语句预设一个函数调用（延期的函数），该调用在函数执行defer返回时立刻运行。该方法显得不同常规，但却是处理上述资源泄露情况很有效，无论函数怎样返回，都必须进行资源释放。
+
+再看一个列子
+```
+for i := 0; i < 5; i++ {
+    defer fmt.Printf("%d ", i)
+}
+```
+被延期的函数以后进先出（LIFO）的顺行执行，因此以上代码在返回时将打印4 3 2 1 0
+
+# 协程goroutine
+先来复习下,进程,线程和协程的概念,GoRoutine就是Go的协程
+
+- 进程：分配完整独立的地址空间，拥有自己独立的堆和栈，既不共享堆，亦不共享栈，进程的切换只发生在内核态，由操作系统调度。 
+- 线程：和其它本进程的线程共享地址空间，拥有自己独立的栈和共享的堆，共享堆，不共享栈，线程的切换一般也由操作系统调度(标准线程是的)。 
+- 协程：和线程类似，共享堆，不共享栈，协程的切换一般由程序员在代码中显式控制。
+
+## goroutine基本概念
+GoRoutine主要是使用go关键字来调用函数，你还可以使用匿名函数;
+**注意,go routine被调度的的先后顺序是没法保证的**
+```
+package main
+import "fmt"
+
+func f(msg string) {
+    fmt.Println(msg)
+}
+
+func main(){
+    go f("goroutine")
+
+    go func(msg string) {
+        fmt.Println(msg)
+    }("going")
+}
+```
+下面来看一个常见的错误用法
+```
+array := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i"}
+var i = 0
+for index, item := range array {
+  go func() {
+      fmt.Println("index:", index, "item:", item)
+      i++
+  }()
+}
+time.Sleep(time.Second * 1)
+fmt.Println("------------------")
+//output:
+------------------
+index: 8 item: i
+index: 8 item: i
+index: 8 item: i
+index: 8 item: i
+index: 8 item: i
+index: 8 item: i
+index: 8 item: i
+index: 8 item: i
+index: 8 item: i
+------------------
+```
+最初的意图是index与item每次为1,a;2,b;3,c;….这样,结果却不是这样,到底什么原因呢?
+
+这里的go func每个index与item是共享的，并不是局部的，由于for循环的执行是很快的，每次循环启动一个go routine，在for循环结束之后（此时index与item的值分别变成了8与e），但是这个时候第一个启动的goroutine可能还没有开始执行，由于它们是共享变量的，之后所有输出的index与item都是8与e于是出现了上面的效果。
+
+将原来程序做些修改就能满足要求了:
+```
+for i = 0; i < length; i++ {
+  go func(index int) {
+  //这里如果打印 array[i]的话 就会index out of range了因为i是全局的(在执行到打印语句的时候i的值已经变成了length+1了)不是新启动的这个goroutine的
+  //新启动的goroutine与原来的main routine 是共享占空间的 因此 这个i也是共享的
+  fmt.Println("index:", index, "item:", array[index])
+  }(i)
+```
+
+## goroutine并发
+goroutine有个特性，如果一个goroutine没有被阻塞，那么别的goroutine就不会得到执行,这并不是真正的并发，如果你要真正的并发，你需要在你的main函数的第一行加上下面的这段代码：
+```
+import "runtime"
+...
+runtime.GOMAXPROCS(4)
+```
+
+goroutine并发安全性问题,需要注意:
+
+- 互斥量上锁
+```
+var mutex = &sync.Mutex{} //可简写成：var mutex sync.Mutex
+mutex.Lock()
+...
+mutex.Unlock()
+```
+- 原子性操作
+```
+import "sync/atomic"
+......
+atomic.AddUint32(&cnt, 1)
+......
+cntFinal := atomic.LoadUint32(&cnt)//取数据
+```
+
+# Channel 信道
+
+## Channel的基本概念
+
+Channal就是用来通信的，像Unix下的管道一样,
+它的操作符是箭头" <-" , **箭头的指向就是数据的流向**
+```
+ch <- v // 发送值v到Channel ch中
+v := <-ch // 从Channel ch中接收数据，并将数据赋值给v
+```
+
+下面的程序演示了一个goroutine和主程序通信的例程。
+```
+package main
+
+import "fmt"
+
+func main() {
+    //创建一个string类型的channel
+    channel := make(chan string)
+
+    //创建一个goroutine向channel里发一个字符串
+    go func() { channel <- "hello" }()
+
+    msg := <- channel
+    fmt.Println(msg)
+}
+```
+chan为先入先出的队列,有三种类型,双向,只读,只写,分别为"chan","chan<-","<-chan"
+初始化时候,可以指定容量`make(chanint,100)`;容量(capacity)代表Channel容纳的最多的元素的数量
+
+## Channel的阻塞
+channel默认上是阻塞的，也就是说，如果Channel满了，就阻塞写，如果Channel空了，就阻塞读。于是，我们就可以使用这种特性来同步我们的发送和接收端。
+```
+package main
+
+import "fmt"
+import "time"
+
+func main() {
+
+    channel := make(chan string) //注意: buffer为1
+
+    go func() {
+        channel <- "hello"
+        fmt.Println("write \"hello\" done!")
+
+        channel <- "World" //Reader在Sleep，这里在阻塞
+        fmt.Println("write \"World\" done!")
+
+        fmt.Println("Write go sleep...")
+        time.Sleep(3*time.Second)
+        channel <- "channel"
+        fmt.Println("write \"channel\" done!")
+    }()
+
+    time.Sleep(2*time.Second)
+    fmt.Println("Reader Wake up...")
+
+    msg := <-channel
+    fmt.Println("Reader: ", msg)
+
+    msg = <-channel
+    fmt.Println("Reader: ", msg)
+
+    msg = <-channel //Writer在Sleep，这里在阻塞
+    fmt.Println("Reader: ", msg)
+}
+```
+结果为
+```
+Reader Wake up...
+Reader:  hello
+write "hello" done!
+write "World" done!
+Write go sleep...
+Reader:  World
+write "channel" done!
+Reader:  channel
+```
+
+## 多个Channel的select
+```
+package main
+import "time"
+import "fmt"
+
+func main() {
+    //创建两个channel - c1 c2
+    c1 := make(chan string)
+    c2 := make(chan string)
+
+    //创建两个goruntine来分别向这两个channel发送数据
+    go func() {
+        time.Sleep(time.Second * 1)
+        c1 <- "Hello"
+    }()
+    go func() {
+        time.Sleep(time.Second * 1)
+        c2 <- "World"
+    }()
+
+    //使用select来侦听两个channel
+    for i := 0; i < 2; i++ {
+        select {
+        case msg1 := <-c1:
+            fmt.Println("received", msg1)
+        case msg2 := <-c2:
+            fmt.Println("received", msg2)
+        }
+    }
+}
+```
+
+# 定时器
+Go语言中可以使用time.NewTimer或time.NewTicker来设置一个定时器，这个定时器会绑定在你的当前channel中，通过channel的阻塞通知机器来通知你的程序。
+```
+package main
+
+import "time"
+import "fmt"
+
+func main() {
+    timer := time.NewTimer(2*time.Second)
+
+    <- timer.C
+    fmt.Println("timer expired!")
+}
+```
+
+
+## 关闭channel
+使用close命令
+```
+close(channel)
+```
+
+# 系统调用
+Go语言主要是通过两个包完成的。一个是os包，一个是syscall包。
+这两个包里提供都是Unix-Like的系统调用，
+
+- syscall里提供了什么Chroot/Chmod/Chmod/Chdir…，Getenv/Getgid/Getpid/Getgroups/Getpid/Getppid…，还有很多如Inotify/Ptrace/Epoll/Socket/…的系统调用。
+- os包里提供的东西不多，主要是一个跨平台的调用。它有三个子包，Exec（运行别的命令）, Signal（捕捉信号）和User（通过uid查name之类的）
+
+如执行命令行
+```
+package main
+import "os/exec"
+import "fmt"
+func main() {
+    cmd := exec.Command("ping", "127.0.0.1")
+    out, err := cmd.Output()
+    if err!=nil {
+        println("Command Error!", err.Error())
+        return
+    }
+    fmt.Println(string(out))
+}
+```
+
+# 锁
+
+## 互斥锁
+
+开箱即用型,使用sync.Mutex
+
+```
+var mutex sync.Mutex
+mutex.Lock()
+
+defer mutex.Unlock()  #defer语句来保证该互斥锁的及时解锁
+```
+
+`defer`语句可以用来保证在该函数被执行结束之前互斥锁mutex一定会被解锁。这省去了我们在所有return语句之前以及异常发生之时重复的附加解锁操作的工作。
+
+## 读写锁
+
+读写锁即是针对于读写操作的互斥锁。它与普通的互斥锁最大的不同就是，它可以分别针对读操作和写操作进行锁定和解锁操作。
+
+读写锁遵循的访问控制规则与互斥锁有所不同。在读写锁管辖的范围内，它允许任意个读操作的同时进行。但是，在同一时刻，它只允许有一个写操作在进行。并且，在某一个写操作被进行的过程中，读操作的进行也是不被允许的。
+
+读写锁由结构体类型sync.RWMutex代表。与互斥锁类似，sync.RWMutex类型的零值就已经是立即可用的读写锁了
+
+```
+写操作锁定
+func (*RWMutex) Lock
+func (*RWMutex) Unlock
+
+# 读操作锁定
+func (*RWMutex) RLock
+func (*RWMutex) RUnlock
+```
+
+# Range关键字
+
+range是用来遍历的，使用非常方便
+
+**注意！注意！注意！range每次取出来的，是数组元素的一个拷贝，所以如果用来赋值，不会改变原数组**
+
+下面来看一组程序
+
+```
+type Foo struct {
+  bar string
+}
+func main() {
+  list := []Foo{
+    {"A"},
+    {"B"},
+    {"C"},
+  }
+  list2 := make([]*Foo, len(list))
+  for i, value := range list {
+    list2[i] = &value
+  }
+  fmt.Println(list[0], list[1], list[2])
+  fmt.Println(list2[0], list2[1], list2[2])
+}
+```
+
+我们干了什么事情呢
+
+>    1、定义了一个叫做Foo的结构，里面有一个叫bar的field。随后，我们创建了一个基于Foo结构体的slice，名字叫list
+     2、我们还创建了一个基于Foo结构体指针类型的slice，叫做list2
+     3、在一个for循环中，我们试图遍历list中的每一个元素，获取其指针地址，并赋值到list2中index与之对应的位置。
+     4、最后，分别输出list与list2中的每个元素
+     
+期望结果为:
+
+```
+{A} {B} {C}
+&{A} &{B} &{C}
+```
+
+实际结果为:
+
+```
+{A} {B} {C}
+&{C} &{C} &{C}
+```
+
+在Go的`for…range`循环中，Go始终使用值拷贝的方式代替被遍历的元素本身，简单来说，就是`for…range`中那个value，是一个值拷贝，而不是元素本身。这样一来，当我们期望用&获取元素的指针地址时，实际上只是取到了value这个临时变量的指针地址，而非list中真正被遍历到的某个元素的指针地址。而在整个`for…range`循环中，value这个临时变量会被重复使用，所以，在上面的例子中，list2被填充了三个相同的指针地址，并且这三个地址都指向value，而在最后一次循环中，value被赋与了`{c}`的指针地址。因此，list2输出的时候显示出了三个`&{c}` 。
+
+同样,下面的写法,得到的结果也是三个`&{c}`
+
+```
+var value Foo
+for i := 0; i < len(list); i++ {
+ value = list[i]
+ list2[i] = &value
+}
+```
+
+那么，怎样才是正确的写法呢？我们应该用index来访问`for…range`中真实的元素，并获取其指针地址：
+
+```
+for i, _ := range list {
+ list2[i] = &list[i]
+}
+```
+
+同理,下面的这个通过值来修改的不会成功
+
+```
+ for _, e := range array {
+ e.field = "foo"
+ }
+```
+
+必须通过index来修改
+
+```
+for i, _ := range array {
+ array[i].field = "foo"
+}
+```
