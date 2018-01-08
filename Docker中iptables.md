@@ -155,13 +155,16 @@ setupIPTables()
             如果不允许ICC,则删除ACCEPT，"-A"加入DROP规则; 如果允许则删除DROP规则, "-I"加入ACCEPT规则
          -> 如果是insert为false,删除对应规则
    -> bridgeNetwork.registerIptCleanFunc()
+      就是把上面的函数注册到清理函数列表里面，只是insert标志位置为false
 -> if networkConfiguration.Internal为假,
    -> setupIPTablesInternal()
-   -> bridgeNetwork.registerIptCleanFunc()
+      -> 根据ipmasq和hairpin条件判断新增:Nat表的POSTROUTING新增了两条规则; 新增DOCKER链; Filter表FORWARD链增加两条规则;
+      -> setIcc()
+   -> bridgeNetwork.registerIptCleanFunc()
    -> getDriverChains()获取了nat和filter表的规则链
    -> ProgramChain()分别设置nat和filter表规则链
    -> registerIptCleanFunc()注册清理函数
-   -> n.portMapper.SetIptablesChain()
+   -> n.portMapper.SetIptablesChain()  设了链到portmapper里面
 ```
 
 
