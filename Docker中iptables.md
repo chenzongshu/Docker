@@ -137,11 +137,33 @@ RETURN     all  --  anywhere             anywhere
 
 从上面的叙述可以知道, docker的iptables添加可以分成两部分, 一部分是daemon在启动的时候,一部分是容器在启动的时候.
 
-## 
+## 容器启动
 
 在createNetwork()[bridge.go]中,遍历循环一个结构体{Condition bool ; Fn setupStep}, 里面保存了创建网络的步骤, 其中一步为 network.setupIPTables()
 
 在setupIPTables()里面,判断config.Internal,如果为真,则调用setupInternalNetworkRules()(?看含义为真是内部网络,还设置网络规则?); 如果为假就调用一系列设置: 先调用setupIPTablesInternal(),再getDriverChains()获取了需要设置的规则,最后用ProgramChain()函数设置了Filter表和Nat表的链;
+
+```
+setupIPTables()
+-> if networkConfiguration.Internal为真
+   -> setupInternalNetworkRules()
+      -> 给filter表设置了DOCKER-ISOLATION链的规则,设置网卡流入流出的过滤规则
+         "-A DOCKER-ISOLATION -i docker0 -o docker_gwbridge -j DROP"
+         "-A DOCKER-ISOLATION -i docker_gwbridge -o docker0 -j DROP"
+      -> setIcc() 设置容器内部间联系
+         -> 如果是insert为true,在FORWARD链中
+            如果不允许ICC,则删除ACCEPT，"-A"加入DROP规则; 如果允许则删除DROP规则, "-I"加入ACCEPT规则
+         -> 如果是insert为false,删除对应规则
+   -> bridgeNetwork.registerIptCleanFunc()
+-> if networkConfiguration.Internal为假,
+   -> setupIPTablesInternal()
+   -> bridgeNetwork.registerIptCleanFunc()
+   -> getDriverChains()获取了nat和filter表的规则链
+   -> ProgramChain()分别设置nat和filter表规则链
+   -> registerIptCleanFunc()注册清理函数
+   -> n.portMapper.SetIptablesChain()
+```
+
 
 
 removeIPChains() 删除规则链:
