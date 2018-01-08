@@ -1,5 +1,85 @@
 Docker使用linux iptables来控制与它创建的接口和网络之间的通信
 
+# 初始化
+
+docker安装好的时候，本身是没有任何添加任何iptables规则的，当docker Daemon启动的时候，nat将会增加 DOCKER链；filter表增加DOCKER和DOCKER-ISOLATION链
+
+只是启动daemon的时候, 是没有创建overlay网络的.
+
+```
+root@computer-node4 /root >iptables -L -t nat
+Chain PREROUTING (policy ACCEPT)
+target     prot opt source               destination
+DOCKER     all  --  anywhere             anywhere             ADDRTYPE match dst-type LOCAL
+
+Chain INPUT (policy ACCEPT)
+target     prot opt source               destination
+
+Chain OUTPUT (policy ACCEPT)
+target     prot opt source               destination
+DOCKER     all  --  anywhere            !loopback/8           ADDRTYPE match dst-type LOCAL
+
+Chain POSTROUTING (policy ACCEPT)
+target     prot opt source               destination
+MASQUERADE  all  --  172.17.0.0/16        anywhere
+
+Chain DOCKER (2 references)
+target     prot opt source               destination
+RETURN     all  --  anywhere             anywhere
+
+
+root@computer-node4 /home/czs >iptables -L -t filter
+Chain INPUT (policy ACCEPT)
+target     prot opt source               destination
+ACCEPT     udp  --  anywhere             anywhere             udp dpt:domain
+
+Chain FORWARD (policy ACCEPT)
+target     prot opt source               destination
+DOCKER-ISOLATION  all  --  anywhere             anywhere
+DOCKER     all  --  anywhere             anywhere
+
+Chain OUTPUT (policy ACCEPT)
+target     prot opt source               destination
+ACCEPT     udp  --  anywhere             anywhere             udp dpt:bootpc
+
+Chain DOCKER (1 references)
+target     prot opt source               destination
+
+Chain DOCKER-ISOLATION (1 references)
+target     prot opt source               destination
+RETURN     all  --  anywhere             anywhere
+
+```
+
+如果这个时候新建一个swarm网络，docker会默认新建一个名称是ingress的overlay网络，**但是这个时候对应的iptables规则并没有建立好**
+
+在swarm下启动一个容器(使用端口映射)，即使用该overlay网络启动一个容器，这个时候会在filter和nat表里面新建一条DOCKER-INGRESS链
+
+```
+...... 其他省略,可以看到在filter表里面, FORWARD链里面增加一条规则,并新增了DOCKER-INGRESS链 ......
+Chain FORWARD (policy ACCEPT)
+target     prot opt source               destination
+DOCKER-INGRESS  all  --  anywhere             anywhere
+DOCKER-ISOLATION  all  --  anywhere             anywhere
+
+Chain DOCKER-INGRESS (1 references)
+target     prot opt source               destination
+ACCEPT     tcp  --  anywhere             anywhere             tcp dpt:radan-http
+ACCEPT     tcp  --  anywhere             anywhere             state RELATED,ESTABLISHED tcp spt:radan-http
+RETURN     all  --  anywhere             anywhere
+
+...... 其他省略,可以看到在nat表里面, OUTPUT链里面增加一条规则,并新增了DOCKER-INGRESS链 ......
+Chain OUTPUT (policy ACCEPT)
+target     prot opt source               destination
+DOCKER-INGRESS  all  --  anywhere             anywhere             ADDRTYPE match dst-type LOCAL
+DOCKER     all  --  anywhere            !loopback/8           ADDRTYPE match dst-type LOCAL
+
+Chain DOCKER-INGRESS (2 references)
+target     prot opt source               destination
+DNAT       tcp  --  anywhere             anywhere             tcp dpt:radan-http to:172.18.0.2:8088
+RETURN     all  --  anywhere             anywhere
+```
+
 # filter表
 
 filter表是网络或接口的流量的安全规则表
@@ -54,6 +134,10 @@ RETURN     all  --  anywhere             anywhere
 ```
 
 # 代码逻辑
+
+从上面的叙述可以知道, docker的iptables添加可以分成两部分, 一部分是daemon在启动的时候,一部分是容器在启动的时候.
+
+## 
 
 在createNetwork()[bridge.go]中,遍历循环一个结构体{Condition bool ; Fn setupStep}, 里面保存了创建网络的步骤, 其中一步为 network.setupIPTables()
 
