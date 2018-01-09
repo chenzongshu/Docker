@@ -167,6 +167,23 @@ setupIPTables()
    -> n.portMapper.SetIptablesChain()  设了链到portmapper里面
 ```
 
+## Ingress规则创建
+
+iptables的的Ingress规则创建,在使用swarm的task(容器)启动的时候创建
+
+同容器启动流程一样, 代码走到 connectToNetwork() -> ep.Join()里面的时候, 开始创建Ingress规则
+
+```
+sbJoin()
+-> ep.addToCluster()
+   -> 里面根据endpoint获取它的network,再由network获取controller
+   -> 如果endpoint不是匿名,ep的svcID不为空的时候,调用addServiceBinding()
+      -> 最后调用了network.addLBBackend() -> sandbox.addLBBackend()
+         -> 如果addService为true, 如果sb.ingress为true, 则调用programIngress()
+            -> 先判断nat和filter表里面是否有DOCKER-INGRESS链,如果有则先删除
+            -> 如果是增加操作请求,把Ingress所有规则和链都加上
+```
+
 ## 容器启动
 
 ```
