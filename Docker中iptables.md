@@ -137,7 +137,7 @@ RETURN     all  --  anywhere             anywhere
 
 从上面的叙述可以知道, docker的iptables添加可以分成两部分, 一部分是daemon在启动的时候,一部分是容器在启动的时候.
 
-## 容器启动
+## Daemon启动
 
 在createNetwork()[bridge.go]中,遍历循环一个结构体{Condition bool ; Fn setupStep}, 里面保存了创建网络的步骤, 其中一步为 network.setupIPTables()
 
@@ -167,10 +167,7 @@ setupIPTables()
    -> n.portMapper.SetIptablesChain()  设了链到portmapper里面
 ```
 
-
-
-removeIPChains() 删除规则链:
-调用了 chain.Remove() 函数删除了Nat表的DOCKER链，Filter表的DOCKER、DOCKER-ISOLATION两个链。
+## 容器启动
 
 ```
 -> containerStart() [start.go]
@@ -196,3 +193,8 @@ removeIPChains() 删除规则链:
                         -> pm.forward  #设置Iptables
                         -> Forward() [iptables.go]
 ```
+
+removeIPChains() 删除规则链:
+调用了 chain.Remove() 函数删除了Nat表的DOCKER链，Filter表的DOCKER、DOCKER-ISOLATION两个链。
+
+
