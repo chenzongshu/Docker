@@ -184,7 +184,9 @@ sbJoin()
             -> 如果是增加操作请求,把Ingress所有规则和链都加上
 ```
 
-## 容器启动
+## bridge模式下iptables规则
+
+bridge模式,会比其他网络模式多一些iptables规则
 
 ```
 -> containerStart() [start.go]
@@ -210,6 +212,8 @@ sbJoin()
                         -> pm.forward  #设置Iptables
                         -> Forward() [iptables.go]
 ```
+
+
 
 removeIPChains() 删除规则链:
 调用了 chain.Remove() 函数删除了Nat表的DOCKER链，Filter表的DOCKER、DOCKER-ISOLATION两个链。
