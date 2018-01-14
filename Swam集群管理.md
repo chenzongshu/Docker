@@ -80,12 +80,17 @@ type Node struct {
    -> 解析设置了一些默认值:raft的心跳间隔10s,心跳tick为1,选举tick为10,Dispatcher心跳周期5s,Orchestration的task历史租约限制为10
    -> startNewNode()
       -> 如果没输入IP,则单独处理
-      -> swarmagent.NewNode()
-      -> n.Start() 启动节点
-      -> 把节点信息保存在Cluster结构体中,并调用saveState()并把state写入docker-state.json
-      
-      
-   -> 节点通道收到事件分别处理(节点第一次初始化完成之后会关闭通道?)
+      -> swarmagent.NewNode() [\swarmkit\agent\node.go]
+         -> 读取了state.json文件
+	 -> 读取CA
+      -> n.Start() 启动节点
+         -> 读取CA
+	 -> 使用boltdb从 /work/task.db中读取db
+	 -> 起一个协程监控角色变化
+	 -> 
+      -> 把节点信息保存在Cluster结构体中,并调用saveState()并把state写入docker-state.json
+      -> 起三个协程,分别处理 清理cluster的node和err信息; 处理事件; 建立grpc的连接
+   -> 节点通道收到事件分别处理(节点第一次初始化完成之后会关闭通道?)
    -> 
 
 ```
