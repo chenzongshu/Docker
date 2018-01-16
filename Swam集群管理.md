@@ -80,19 +80,32 @@ type Node struct {
    -> 解析设置了一些默认值:raft的心跳间隔10s,心跳tick为1,选举tick为10,Dispatcher心跳周期5s,Orchestration的task历史租约限制为10
    -> startNewNode()
       -> 如果没输入IP,则单独处理
-      -> swarmagent.NewNode() [\swarmkit\agent\node.go]
+      -> swarmagent.NewNode() [\swarmkit\agent\node.go]
          -> 读取了state.json文件
 	 -> 读取CA
-      -> n.Start() 启动节点
+     -> n.Start() 启动节点
          -> 读取CA
 	 -> 使用boltdb从 /work/task.db中读取db
 	 -> 起一个协程监控角色变化，并广播
 	 -> 起一个协程监控更新TLS和CA，并广播
 	 -> 起一个协程监控跑runManager(),把Manager拉起来
-	 -> 起一个协程监控跑runAgent(),把Agent拉起来,这个时候把db传了进去	 
-      -> 把节点信息保存在Cluster结构体中,并调用saveState()并把state写入docker-state.json
-      -> 起三个协程,分别处理 清理cluster的node和err信息; 处理事件; 建立grpc的连接
-   -> 节点通道收到事件分别处理(节点第一次初始化完成之后会关闭通道?)
+	 -> 起一个协程监控跑runAgent(),把Agent拉起来,这个时候把db传了进去
+            -> new一个agent对象
+            -> agent.Start
+	        -> 响应agent的stop,close,和完成事件
+               -> agent.run()
+                  -> worker.Init() 初始化
+                     -> 读取tasks.db中的task,如果没有被指派则删除,否则获取状态,启动新的taskManager,并更新到数据
+                  -> newStatusReporter() 新建状态上报器
+                     -> statusReporter.run()
+                        -> 做一个死循环,直到closed标致位被置为ture才退出
+                        -> 循环statusReporter中的statuses这个map
+                        -> 删除任务,再把UpdateTaskStatus把status发出去
+                        -> 起一个协程调用sendTaskStatus发送状态
+                  
+      -> 把节点信息保存在Cluster结构体中,并调用saveState()并把state写入docker-state.json
+      -> 起三个协程,分别处理 清理cluster的node和err信息; 处理事件; 建立grpc的连接
+   -> 节点通道收到事件分别处理(节点第一次初始化完成之后会关闭通道?)
    -> 
 
 ```
