@@ -455,8 +455,18 @@ func main() {
     fmt.Println(msg)
 }
 ```
+
 chan为先入先出的队列,有三种类型,双向,只读,只写,分别为"chan","chan<-","<-chan"
+
+```
+chan T          // 可以接收和发送类型为 T 的数据  
+chan<- float64  // 只可以用来发送 float64 类型的数据  
+<-chan int      // 只可以用来接收 int 类型的数据  
+```
+
 初始化时候,可以指定容量`make(chanint,100)`;容量(capacity)代表Channel容纳的最多的元素的数量
+
+
 
 ## Channel的阻塞
 channel默认上是阻塞的，也就是说，如果Channel满了，就阻塞写，如果Channel空了，就阻塞读。于是，我们就可以使用这种特性来同步我们的发送和接收端。
@@ -703,3 +713,92 @@ for i, _ := range array {
  array[i].field = "foo"
 }
 ```
+
+# context
+
+通过context，我们可以方便地对同一个请求所产生地goroutine进行约束管理，可以设定超时、deadline，甚至是取消这个请求相关的所有goroutine。
+
+形象地说，假如一个请求过来，需要A去做事情，而A让B去做一些事情，B让C去做一些事情，A、B、C是三个有关联的goroutine，那么问题来了：假如在A、B、C还在处理事情的时候请求被取消了，那么该如何优雅地同时关闭goroutine A、B、C呢？这个时候就轮到context包上场了。
+
+- context包里的方法是线程安全的，可以被多个线程使用
+- 当Context被canceled或是timeout, Done返回一个被closed 的channel
+- 在Done的channel被closed后, Err代表被关闭的原因
+- 如果存在, Deadline 返回Context将要关闭的时间
+- 如果存在，Value 返回与 key 相关了的值，不存在返回 nil
+
+对应下面的包核心
+
+```
+// context 包的核心
+type Context interface {               
+    Done() <-chan struct{}      
+    Err() error 
+    Deadline() (deadline time.Time, ok bool)
+    Value(key interface{}) interface{}
+}
+```
+
+我们不需要手动实现这个接口，context 包已经给我们提供了两个，一个是 Background()，一个是 TODO()，这两个函数都会返回一个 Context 的实例。只是返回的这两个实例都是空 Context
+
+## 主要方法
+
+```
+func WithCancel(parent Context) (ctx Context, cancel CancelFunc)
+func WithDeadline(parent Context, deadline time.Time) (Context, CancelFunc)
+func WithTimeout(parent Context, timeout time.Duration) (Context, CancelFunc)
+func WithValue(parent Context, key interface{}, val interface{}) Context
+```
+
+## 使用方法
+
+一般使用是这样使用，创建context然后调用接口
+
+```
+ctx,cancel := context.WithCancel(context.Background())
+stack := &Stack{}
+pkt,err := stack.Read(ctx)
+```
+
+那么，它本身就可以支持取消和超时，也就是用户如果需要取消，比如发送了SIGINT信号，程序需要退出，可以在收到信号后调用cancel：
+
+```
+sc := make(chan os.Signal, 0)
+signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM)
+go func() {
+    for range sc {
+        cancel()
+    }
+}()
+```
+
+如果需要超时，这个API也不用改，只需要调用前设置超时时间：
+
+```
+ctx,cancel := context.WithTimeout(context.Background(), 3*time.Second)
+defer cancel()
+pkt,err := stack.Read(ctx)
+```
+
+优势是不影响Read()即用户API的本身的逻辑，在Read中只需要关注context是否Done：
+
+```
+func (v *Stack) Read(ctx context.Context) (pkt Packet, err error) {
+    select {
+    case <- ctx.Done():
+        return nil,ctx.Err()
+    }
+    return
+}
+```
+
+## 使用规范
+
+- 1、不要将 Contexts 放入结构体，相反context应该作为第一个参数传入，命名为ctx。
+```
+func DoSomething(ctx context.Context, arg Arg) error {
+         ... use ctx ...
+}
+```
+- 2、即使函数允许也不要传递一个nil的Context。如果不确定使用哪种Conetex，传递context.TODO 
+- 3、使用context的Value相关方法只应该用于在程序和接口中传递的和请求相关的数据，不要用它来传递一些可选的参数。 
+- 4、相同的Context可以在不同的goroutines中传递，Contexts是线程安全的。
