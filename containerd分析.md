@@ -1,3 +1,4 @@
+
 # containerd介绍
 
 ## 什么是containerd
@@ -13,6 +14,8 @@ containerd并不是直接面向最终用户的，而是主要用于集成到更�
 
 ## 架构
 
+### 架构层次
+
 ![containerd架构](http://djanus-test.oss-cn-hangzhou.aliyuncs.com/architecture.png)
 
 中间这一层里包含了三个子系统，从这里可以看出containerd支持哪些能力
@@ -20,6 +23,17 @@ containerd并不是直接面向最终用户的，而是主要用于集成到更�
 - Distribution: 和Docker Registry打交道，拉取镜像
 - Bundle: 管理本地磁盘上面镜像的子系统。
 - Runtime：创建容器、管理容器的子系统。
+
+### 交互
+
+![](https://github.com/JinhuaWei/docker-notes/blob/master/docker-%E9%80%9A%E4%BF%A1.png)
+
+1、docker daemon 模块通过 grpc 和 containerd模块通信：dockerd 由libcontainerd负责和containerd模块进行交换， dockerd 和 containerd 通信socket文件：docker-containerd.sock
+2、containerd 在dockerd 启动时被启动，启动时，启动grpc请求监听。containerd处理grpc请求，根据请求做相应动作；
+若是start或是exec 容器，containerd 拉起一个container-shim , 并通过exit 、control 文件（每个容器独有）通信；
+3、container-shim别拉起后，start/exec/create拉起runC进程，通过exit、control文件和containerd通信，通过父子进程关系和SIGCHLD监控容器中进程状态；
+4、若是top等命令，containerd通过runC二级制组件直接和容器交换；
+5、在整个容器生命周期中，containerd通过 epoll 监控容器文件，监控容器的OOM等事件；
 
 ## 特性
 
@@ -73,6 +87,33 @@ I/O多路复用就是通过一种机制，一个进程可以监视多个描述�
 
 文件描述符在形式上是一个非负整数。实际上，它是一个索引值，指向内核为每一个进程所维护的该进程打开文件的记录表。当程序打开一个现有文件或者创建一个新文件时，内核向进程返回一个文件描述符。在程序设计中，一些涉及底层的程序编写往往会围绕着文件描述符展开。但是文件描述符这一概念往往只适用于UNIX、Linux这样的操作系统。
 
+## 组件通信
+
+### daemon -> libcontainerd
+
+LIBCONTAINERD 部分主要作用： 赋值; 和CONTAINERD进程通信; 监控CONTAINERD进程状态
+
+LIBCONTAINERD 随DOCKERD启动，启动过程中启动协程监控：
+1、和CONTAINERD间的grpc链接情况 
+2、监听由CONTAINERD发送过来的消息 启动监控消息协程
+
+```
+//libcontainerd/remote_linux.go
+//starEventMonitor() ---> handleEventStream()
+
+func (r *remote) handleEventStream(events containerd.API_EventsClient) {
+	for {
+		e, err := events.Recv()   // ---> 此为阻塞方法：等待CONTAINERD发送 gRPC消息
+...
+		if err := container.handleEvent(e); err != nil {
+			logrus.Errorf("libcontainerd: error processing state change for %s: %v", e.Id, err)
+		}
+		...
+}
+```
+
+
+
 ## 入口函数
 
 在`docker\containerd\containerd\main.go`
@@ -110,4 +151,23 @@ mian()
          types.RegisterAPIServer(s, server.NewServer(sv))
       最后起了一个goroutine来监听gRPC连接
    -> 通过channel响应收到Ctr+C等中断信息,其他都不反应
+```
+
+## containerd-shim
+
+CONTAINERD-SHIM的代码和业务逻辑都很简单；其主要实现目的：
+
+1、通过runC命令可以启动、执行容器、进程；
+2、监控容器进程状态，当容器执行完成后，通过exit fifo文件报告容器进程结束状态；
+3、当此容器SHIM的第一个实例进程被杀死后，reaper掉所有其子进程；
+
+一个容器可以由多个container-shim进程；container-shim进程由containerd进程拉起，并持续存在到容器实例进程退出为止；
+
+CONTAINERD-SHIM的代码在containerd/container-shim/目录下；主要包含main.go和process.go； 主要启动业务逻辑
+
+```
+main()
+------>start()
+------------>(p *process) create() //主要功能启动runC进程
+------>start函数中，监控runC进程状态
 ```
