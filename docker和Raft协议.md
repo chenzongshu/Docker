@@ -45,6 +45,23 @@ terms简单来说,就是一个时间戳,表明选举的轮数
 1. Candidate在等待投票结果的过程中，可能会接收到来自其它Leader的AppendEntries RPC。如果该Leader的Term不小于本地的currentTerm，则认可该Leader身份的合法性，主动降级为Follower；反之，则维持Candidate身份，继续等待投票结果
 2. Candidate既没有选举成功，也没有收到其它Leader的RPC，这种情况一般出现在多个节点同时发起选举（如图Split Vote），最终每个Candidate都将超时。为了减少冲突，这里采取“随机退让”策略，每个Candidate重启选举定时器（随机值），大大降低了冲突概率
 
+## 日志
+
+### 复制
+
+在 raft 集群中，所有日志都必须首先提交至 leader 节点。leader 在每个 heartbeat 向 follower 同步日志，等待过半节点反馈之后再通知节点保存该日志到本地。
+
+> 1、首先有一条 uncommitted 的日志条目提交至 leader 节点
+2、在下一个 heartbeat，leader 将此条目复制给所有的 follower。
+3、当大多数节点记录此条目之后，leader节点认定此条目有效，将此条目设定为已提交并存储于本地磁盘
+4、在下一个 heartbeat，leader通知所有follower提交这一日志条目并存储于各自的磁盘内
+
+### 容错
+
+如果集群发生脑裂
+
+网络分区将原先的 Leader 节点和 Follower 节点分隔开，Follower 收不到 Leader 的心跳将发起选举产生新的 Leader。这时就产生了双 Leader，原先的 Leader 独自在一个区，向它提交数据不可能复制到多数节点所以永远提交不成功。向新的 Leader 提交数据可以提交成功，网络恢复后旧的 Leader 发现集群中有更新任期（Term）的新 Leader 则自动降级为 Follower 并从新 Leader 处同步数据达成集群数据一致。
+
 
 # Swarmkit和Raft
 
