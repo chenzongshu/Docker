@@ -1,6 +1,19 @@
 
 因为在看docker源代码，必须需要了解Go语言，所以做了一些学习和记录，主要记录两者不同的地方。根据实际代码阅读中的问题而来，省略了和C语言相同的部分,干货满满。
-> Go语言定义类型和变量名，方向和一般语言是反的，这点我觉得简直是反人类，非要搞个不一样的显示自己多牛牪犇
+> Go语言定义类型和变量名，方向和一般语言是反的，这点我觉得简直是反人类
+
+# GO官方资料
+
+进入到官网后，会看到很多资源。
+
+- 文档：[golang.org/doc](https://golang.org/doc/)，官方文档，仔细读下文档首页并分类，了解下自己要学哪些内容；
+- 一览：[tour.golang.org](https://tour.golang.org/)，交互式运行环境，不安装golang便可体验学习它的语法与使用；
+- 指南：[golang.org/ref/spec](https://golang.org/ref/spec)，golang学习指导手册，从基础语法到高级特性全部都有介绍；
+- 标准库：[golang.org/pkg/](https://golang.org/pkg/)，可以查看所有的官方库的接口、源码以及使用介绍；
+- 博客：[blog.golang.org/](https://blog.golang.org/)，不定期分享go的最佳实践，有些公司也会投稿介绍自己的案例；
+- 实验室：[play.golang.org](https://play.golang.org/)，感觉和tour类似，不过在这里编写的代码可以分享给别人；
+
+
 
 # 关键字
 
@@ -54,9 +67,34 @@ func main() {
 
 - package中每个init()函数都会被调用,如果不同文件,按照文件名字字符串比较"从小到大"的顺序,同一个文件从上到下
 
--  要生成golang可执行程序，**必须建立一个名为main的package**，并且在该package中**必须包含一个名为main()的函数**。
+- 要生成golang可执行程序，**必须建立一个名为main的package**，并且在该package中**必须包含一个名为main()的函数**。
 
 - **import关键字导入的是package路径，而在源文件中使用package时，才需要package名**。经常可见的import的目录名和源文件中使用的package名一致容易造成import关键字后即是package名的错觉，真正使用时，这两者可以不同
+
+- Go 语言也有 Public 和 Private 的概念，粒度是包。如果类型/接口/方法/函数/字段的首字母大写，则是 Public 的，对其他 package 可见，如果首字母小写，则是 Private 的，对其他 package 不可见
+
+# Modules
+
+[Go Modules](https://github.com/golang/go/wiki/Modules) 是 Go 1.11 版本之后引入的，Go 1.11 之前使用 $GOPATH 机制。Go Modules 可以算作是较为完善的包管理工具
+
+环境变量 GO111MODULE 的值默认为 AUTO，强制使用 Go Modules 进行依赖管理，可以将 GO111MODULE 设置为 ON。  
+
+在一个空文件夹下，初始化一个 Module
+
+```
+$ go mod init example
+go: creating new go.mod: module example
+```
+
+运行 `go run .`，将会自动触发第三方包 `rsc.io/quote`的下载，具体的版本信息也记录在了`go.mod`中：
+
+```
+module example
+
+go 1.13
+
+require rsc.io/quote v3.1.0+incompatible
+```
 
 # import特殊语法
 
@@ -111,6 +149,18 @@ import _ "package3"
 ...
 ```
 
+# 作用域
+
+## 变量作用域
+
+
+
+## 函数作用域
+
+函数名称是小写开头的，它的作用域只属于所声明的包内使用，不能被其他包使用;
+
+如果我们把函数名以大写字母开头，该函数的作用域就大了，可以被其他包调用。这也是Go语言中大小写的用处
+
 # 变量
 
 ## 变量定义
@@ -129,7 +179,28 @@ var a,b,c = 3,4,"foo"
 d:=100        #系统自动推断类型,不需要var关键字
 ```
 
+## 字符串中文
+
+```
+var str = "hello 你好"  //长度是12个字符
+```
+
+**golang中string底层是通过byte数组实现的。中文字符在unicode下占2个字节，在utf-8编码下占3个字节，而golang默认编码正好是utf-8。**
+
+可以将 string 转为 rune 数组,  转换成 `[]rune` 类型后，字符串中的每个字符，无论占多少个字节都用 int32 来表示，因而可以正确处理中文。
+
+```
+str2 := "Go语言"
+runeArr := []rune(str2)
+fmt.Println(reflect.TypeOf(runeArr[2]).Kind()) // int32
+fmt.Println(runeArr[0], string(runeArr[0]))    // 71 G
+fmt.Println(runeArr[1], string(runeArr[1]))    // 111 o
+fmt.Println(runeArr[2], string(runeArr[2]))    // 35821 语
+fmt.Println("len(runeArr)：", len(runeArr))    // len(runeArr)： 4
+```
+
 ## 特殊变量
+
 "\_" 是特殊变量,任何赋值给"_"的值都会被丢弃
 
 ## 指针
@@ -176,7 +247,7 @@ fmt.Println(b)
 # 循环与判断
 
 - if语句没有圆括号,但是必须有花括号;
-- switch没有break;
+- switch没有break, 匹配到某个 case，执行完该 case 定义的行为后，默认不会继续往下执行。如果需要继续往下执行，需要使用 fallthrough;
 - for没有圆括号;(注意go中没有while)
 ```
 //经典的for语句 init; condition; post
@@ -663,7 +734,7 @@ func main() {
      2、我们还创建了一个基于Foo结构体指针类型的slice，叫做list2
      3、在一个for循环中，我们试图遍历list中的每一个元素，获取其指针地址，并赋值到list2中index与之对应的位置。
      4、最后，分别输出list与list2中的每个元素
-     
+
 期望结果为:
 
 ```
@@ -802,3 +873,65 @@ func DoSomething(ctx context.Context, arg Arg) error {
 - 2、即使函数允许也不要传递一个nil的Context。如果不确定使用哪种Conetex，传递context.TODO 
 - 3、使用context的Value相关方法只应该用于在程序和接口中传递的和请求相关的数据，不要用它来传递一些可选的参数。 
 - 4、相同的Context可以在不同的goroutines中传递，Contexts是线程安全的。
+
+
+
+# 目录结构
+
+在开发中，一个良好的目录结构是很重要的，好的目录结构不仅能使项目结构清晰，也能让后加入者快速了解项目，便于上手。
+
+```golang
+├── conf                         # 配置文件统一存放目录
+│   ├── config.yaml              # 配置文件
+├── config                       # 专门用来处理配置和配置文件的Go package
+│   └── config.go                 
+├── db.sql                       # 在部署新环境时，可以登录MySQL客户端，执行source db.sql创建数据库和表
+├── handler                      # 类似MVC架构中的C，用来读取输入，并将处理流程转发给实际的处理函数，最后返回结果
+│   ├── handler.go
+│   ├── sd                       # 健康检查handler
+│   │   └── check.go 
+│   └── user                     # 核心：用户业务逻辑handler
+│       ├── create.go            # 新增用户
+│       └── user.go              # 存放用户handler公用的函数、结构体等
+├── main.go                      # Go程序唯一入口
+├── Makefile                     # Makefile文件，一般大型软件系统都是采用make来作为编译工具
+├── model                        # 数据库相关的操作统一放在这里，包括数据库初始化和对表的增删改查
+│   ├── init.go                  # 初始化和连接数据库
+│   ├── model.go                 # 存放一些公用的go struct
+│   └── user.go                  # 用户相关的数据库CURD操作
+├── pkg                          # 引用的包
+│   ├── constvar                 # 常量统一存放位置
+│   │   └── constvar.go
+│   ├── errno                    # 错误码存放位置
+│   │   ├── code.go
+│   │   └── errno.go
+├── README.md                    # API目录README
+├── router                       # 路由相关处理
+│   ├── middleware               # API服务器用的是Gin Web框架，Gin中间件存放位置
+│   │   ├── header.go
+│   │   ├── logging.go
+│   │   └── requestid.go
+│   └── router.go                # 路由
+├── service                      # 实际业务处理函数存放位置
+│   └── service.go
+├── util                         # 工具类函数存放目录
+│   ├── util.go 
+│   └── util_test.go
+└── vendor                         # vendor目录用来管理依赖包
+    ├── github.com
+    ├── golang.org
+    ├── gopkg.in
+    └── vendor.json
+```
+
+
+
+# 附录:
+
+Go知识图谱:  https://www.processon.com/view/link/5a9ba4c8e4b0a9d22eb3bdf0#map
+
+Go知乎知识汇总: https://www.zhihu.com/question/30461290
+
+7天用Go从零实现系列: https://github.com/geektutu/7days-golang
+
+更优雅的组织Go程序: [https://medium.com/@draveness/go-%E8%AF%AD%E8%A8%80%E6%98%AF%E4%B8%80%E9%97%A8%E7%AE%80%E5%8D%95-%E6%98%93%E5%AD%A6%E7%9A%84%E7%BC%96%E7%A8%8B%E8%AF%AD%E8%A8%80-%E5%AF%B9%E4%BA%8E%E6%9C%89%E7%BC%96%E7%A8%8B%E8%83%8C%E6%99%AF%E7%9A%84%E5%B7%A5%E7%A8%8B%E5%B8%88%E6%9D%A5%E8%AF%B4-%E5%AD%A6%E4%B9%A0-go-3b12c5adc70b](https://medium.com/@draveness/go-语言是一门简单-易学的编程语言-对于有编程背景的工程师来说-学习-go-3b12c5adc70b)
